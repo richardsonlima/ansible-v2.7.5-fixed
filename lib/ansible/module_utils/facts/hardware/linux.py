@@ -267,7 +267,7 @@ class LinuxHardware(Hardware):
         if os.path.exists('/sys/devices/virtual/dmi/id/product_name'):
             # Use kernel DMI info, if available
 
-            # DMI SPEC -- http://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.0.pdf
+            # DMI SPEC -- https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_3.2.0.pdf
             FORM_FACTOR = ["Unknown", "Other", "Unknown", "Desktop",
                            "Low Profile Desktop", "Pizza Box", "Mini Tower", "Tower",
                            "Portable", "Laptop", "Notebook", "Hand Held", "Docking Station",
@@ -275,7 +275,9 @@ class LinuxHardware(Hardware):
                            "Main Server Chassis", "Expansion Chassis", "Sub Chassis",
                            "Bus Expansion Chassis", "Peripheral Chassis", "RAID Chassis",
                            "Rack Mount Chassis", "Sealed-case PC", "Multi-system",
-                           "CompactPCI", "AdvancedTCA", "Blade"]
+                           "CompactPCI", "AdvancedTCA", "Blade", "Blade Enclosure",
+                           "Tablet", "Convertible", "Detachable", "IoT Gateway",
+                           "Embedded PC", "Mini PC", "Stick PC"]
 
             DMI_DICT = {
                 'bios_date': '/sys/devices/virtual/dmi/id/bios_date',
@@ -373,28 +375,21 @@ class LinuxHardware(Hardware):
 
         return uuids
 
-    def _udevadm_uuid(self, device):
+    def _blkid_uuid(self, device):
         # fallback for versions of lsblk <= 2.23 that don't have --paths, see _run_lsblk() above
         uuid = 'N/A'
 
-        udevadm_path = self.module.get_bin_path('udevadm')
-        if not udevadm_path:
+        blkid_path = self.module.get_bin_path('blkid')
+        if not blkid_path:
             return uuid
 
-        cmd = [udevadm_path, 'info', '--query', 'property', '--name', device]
+        cmd = [blkid_path, '-o', 'export', '-s', 'UUID', device]
         rc, out, err = self.module.run_command(cmd)
         if rc != 0:
             return uuid
 
-        # a snippet of the output of the udevadm command below will be:
-        # ...
-        # ID_FS_TYPE=ext4
-        # ID_FS_USAGE=filesystem
-        # ID_FS_UUID=57b1a3e7-9019-4747-9809-7ec52bba9179
-        # ...
-        m = re.search('ID_FS_UUID=(.*)\n', out)
-        if m:
-            uuid = m.group(1)
+        if out:
+            uuid = out.strip()
 
         return uuid
 
@@ -468,10 +463,10 @@ class LinuxHardware(Hardware):
                 if not self.MTAB_BIND_MOUNT_RE.match(options):
                     options += ",bind"
 
-            # _udevadm_uuid is a fallback for versions of lsblk <= 2.23 that don't have --paths
+            # _blkid_uuid is a fallback for versions of lsblk <= 2.23 that don't have --paths
             # see _run_lsblk() above
             # https://github.com/ansible/ansible/issues/36077
-            uuid = uuids.get(device, self._udevadm_uuid(device))
+            uuid = uuids.get(device, self._blkid_uuid(device))
 
             mount_info = {'mount': mount,
                           'device': device,
